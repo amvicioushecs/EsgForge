@@ -36,6 +36,7 @@ const publicRoutes = [
   "/stripe/success",
   "/stripe/cancel",
 ];
+// Protected app routes (require auth): /dashboard, /stores, /reports, /metrics, /notifications, /settings, /profile
 
 // Add CORS headers if the origin is allowed
 function addCorsHeaders(response: NextResponse, request: NextRequest) {

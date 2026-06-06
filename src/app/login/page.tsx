@@ -1,19 +1,18 @@
 "use client";
 
 import { useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { signIn } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { files } from "@/assets/files";
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect") || "/";
+  const redirect = searchParams.get("redirect") || "/dashboard";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -24,62 +23,72 @@ function LoginForm() {
     e.preventDefault();
     setError("");
     setLoading(true);
+    console.log("[login] attempting sign in", { email });
 
     try {
-      const result = await signIn.email({
-        email,
-        password,
-      });
+      const result = await signIn.email({ email, password });
 
-      // Check if login was successful
       if (result.error) {
-        setError(result.error.message || "Error signing in. Please check your credentials.");
+        console.error("[login] error", result.error);
+        setError(result.error.message || "Invalid email or password.");
         setLoading(false);
         return;
       }
 
-      // If we get here, login was successful
-      // Wait a bit for cookie to be set, then do a full page reload
       setTimeout(() => {
         window.location.href = redirect;
-      }, 500);
+      }, 400);
     } catch (err: any) {
-      console.error("Login error:", err);
-      setError(err.message || "Error signing in. Please check your credentials.");
+      console.error("[login] exception", err);
+      setError(err.message || "Could not sign you in. Please try again.");
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-background to-muted/20">
-      <Card className="w-full max-w-md shadow-xl border-2">
-        <CardHeader className="space-y-2 text-center pb-6">
-          <CardTitle className="text-3xl font-bold tracking-tight">Welcome Back</CardTitle>
-          <CardDescription className="text-base">
-            Enter your email and password to access your account
-          </CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-5">
+    <div className="min-h-screen flex items-center justify-center px-4 py-12 relative overflow-hidden">
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute -top-40 left-1/3 w-[600px] h-[600px] rounded-full bg-cyan-500/10 blur-3xl" />
+        <div className="absolute -bottom-40 -right-20 w-[500px] h-[500px] rounded-full bg-emerald-500/10 blur-3xl" />
+      </div>
+
+      <div className="relative w-full max-w-md">
+        <Link href="/" className="flex items-center justify-center gap-2.5 mb-8 group">
+          <img src={files.appIcon.url} alt="Verdant" className="w-10 h-10 rounded-lg ring-1 ring-cyan-400/30" />
+          <div className="flex flex-col leading-none">
+            <span className="text-base font-semibold text-white tracking-tight">Verdant</span>
+            <span className="text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">ESG · Shopify Plus</span>
+          </div>
+        </Link>
+
+        <div className="glass rounded-2xl p-8">
+          <div className="text-center mb-7">
+            <h1 className="text-3xl font-semibold text-white tracking-tight">Welcome back</h1>
+            <p className="mt-2 text-sm text-slate-400">Sign in to access your compliance dashboard.</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <Alert variant="destructive" className="animate-in fade-in slide-in-from-top-2">
+              <Alert variant="destructive" className="bg-red-500/10 border-red-500/30 text-red-200">
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
+
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-semibold">Email Address</Label>
+              <Label htmlFor="email" className="text-sm text-slate-300">Work email</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="you@example.com"
+                placeholder="you@brand.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="h-11 transition-all focus:ring-2"
+                className="h-11 bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-cyan-400/60"
               />
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-semibold">Password</Label>
+              <Label htmlFor="password" className="text-sm text-slate-300">Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -87,43 +96,38 @@ function LoginForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="h-11 transition-all focus:ring-2"
+                className="h-11 bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-cyan-400/60"
               />
             </div>
-          </CardContent>
-          <CardFooter className="flex flex-col space-y-4 pt-4">
+
             <Button
               type="submit"
-              className="w-full h-11 text-base font-semibold transition-all hover:scale-[1.02]"
               disabled={loading}
+              className="w-full h-11 bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-semibold disabled:opacity-60"
             >
-              {loading ? "Signing in..." : "Sign In"}
+              {loading ? "Signing in…" : "Sign in"}
             </Button>
-            <div className="text-sm text-center text-muted-foreground">
-              Don&apos;t have an account?{" "}
-              <Link href="/register" className="font-semibold text-primary hover:underline transition-colors">
-                Sign up here
+
+            <p className="text-center text-sm text-slate-400">
+              No account yet?{" "}
+              <Link href="/register" className="text-cyan-300 hover:text-cyan-200 font-medium">
+                Create one
               </Link>
-            </div>
-          </CardFooter>
-        </form>
-      </Card>
+            </p>
+          </form>
+        </div>
+
+        <p className="mt-6 text-center text-xs text-slate-500">
+          Protected by industry-standard encryption. Your store data stays yours.
+        </p>
+      </div>
     </div>
   );
 }
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-background to-muted/20">
-        <Card className="w-full max-w-md shadow-xl border-2">
-          <CardHeader className="space-y-2 text-center pb-6">
-            <CardTitle className="text-3xl font-bold tracking-tight">Welcome Back</CardTitle>
-            <CardDescription className="text-base">Loading...</CardDescription>
-          </CardHeader>
-        </Card>
-      </div>
-    }>
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-slate-400">Loading…</div>}>
       <LoginForm />
     </Suspense>
   );
