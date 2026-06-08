@@ -2,11 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSession, signOut } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { files } from "@/assets/files";
-import { api } from "@/lib/api";
 
 const nav = [
   { href: "/dashboard", label: "Overview", icon: "◎" },
@@ -22,31 +21,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const [open, setOpen] = useState(false);
-  const [seeding, setSeeding] = useState(false);
-
-  useEffect(() => {
-    // try to seed sample data once per user (idempotent on server side)
-    let cancelled = false;
-    const seedOnce = async () => {
-      if (typeof window === "undefined") return;
-      const key = `verdant_seed_${session?.user?.id || "anon"}`;
-      if (!session?.user?.id) return;
-      if (window.localStorage.getItem(key)) return;
-      setSeeding(true);
-      try {
-        await api.post("/api/seed", {});
-        if (!cancelled) window.localStorage.setItem(key, "1");
-      } catch (e) {
-        console.error("[seed] failed", e);
-      } finally {
-        if (!cancelled) setSeeding(false);
-      }
-    };
-    seedOnce();
-    return () => {
-      cancelled = true;
-    };
-  }, [session?.user?.id]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -138,12 +112,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <span className="font-semibold text-white">EsgForge</span>
           </Link>
         </div>
-
-        {seeding && (
-          <div className="bg-cyan-400/10 border-b border-cyan-400/20 text-cyan-200 text-xs px-5 sm:px-8 py-2">
-            Setting up sample data for your account…
-          </div>
-        )}
 
         <main className="flex-1 px-5 sm:px-8 py-8">{children}</main>
       </div>

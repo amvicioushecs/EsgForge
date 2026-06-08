@@ -172,12 +172,12 @@ export default function Main() {
                     Start your 14-day trial
                   </Button>
                 </Link>
-                <Link href="/login">
+                <Link href="/demo">
                   <Button
                     variant="outline"
                     className="h-12 px-7 text-base bg-white/5 border-white/10 text-white hover:bg-white/10"
                   >
-                    See live dashboard
+                    See a live demo
                   </Button>
                 </Link>
               </div>
@@ -198,77 +198,59 @@ export default function Main() {
               </div>
             </div>
 
-            {/* Hero visual: a stylized dashboard card */}
+            {/* Hero visual: abstract illustration pointing to the demo */}
             <div className="lg:col-span-5">
               <div className="relative">
                 <div className="absolute -inset-6 bg-gradient-to-tr from-cyan-500/20 via-transparent to-emerald-500/20 blur-3xl rounded-3xl" />
-                <div className="relative glass rounded-2xl p-6 shadow-2xl">
-                  <div className="flex items-center justify-between mb-5">
+                <div className="relative glass rounded-2xl p-7 shadow-2xl">
+                  <div className="flex items-center justify-between mb-6">
                     <div>
-                      <p className="text-xs uppercase tracking-widest text-slate-400">Live preview</p>
-                      <p className="text-lg font-semibold text-white mt-0.5">Q2 Compliance Score</p>
+                      <p className="text-xs uppercase tracking-widest text-slate-400">Interactive walkthrough</p>
+                      <p className="text-lg font-semibold text-white mt-0.5">See EsgForge in action</p>
                     </div>
-                    <span className="text-xs px-2 py-1 rounded-md bg-emerald-400/10 text-emerald-300 border border-emerald-400/20">
-                      CSRD ready
+                    <span className="text-xs px-2 py-1 rounded-md bg-cyan-400/10 text-cyan-300 border border-cyan-400/20">
+                      No login needed
                     </span>
                   </div>
 
-                  <div className="flex items-end gap-3 mb-6">
-                    <span className="text-6xl font-semibold text-cyan-300">87</span>
-                    <span className="text-sm text-slate-400 mb-2">/ 100</span>
-                    <span className="ml-auto text-xs px-2 py-1 rounded bg-emerald-400/10 text-emerald-300 mb-2">
-                      ▲ +6 vs Q1
-                    </span>
-                  </div>
+                  <p className="text-sm text-slate-300/90 leading-relaxed">
+                    Explore a fully populated sample dashboard with a sample Shopify Plus merchant,
+                    Scope 1 / 2 / 3 emissions metrics, and an audit-ready ESG report —
+                    rendered locally in your browser. No account required, nothing is saved.
+                  </p>
 
-                  <div className="grid grid-cols-3 gap-3 mb-6">
+                  <div className="mt-6 grid grid-cols-3 gap-3">
                     {[
-                      { tag: "E", val: "92", color: "bg-emerald-400" },
-                      { tag: "S", val: "84", color: "bg-cyan-400" },
-                      { tag: "G", val: "85", color: "bg-violet-400" },
+                      { tag: "E", name: "Environmental", color: "bg-emerald-400" },
+                      { tag: "S", name: "Social", color: "bg-cyan-400" },
+                      { tag: "G", name: "Governance", color: "bg-violet-400" },
                     ].map((p) => (
                       <div key={p.tag} className="p-3 rounded-lg bg-white/[0.03] border border-white/5">
-                        <p className="text-[10px] uppercase tracking-widest text-slate-400">
-                          {p.tag === "E"
-                            ? "Environmental"
-                            : p.tag === "S"
-                            ? "Social"
-                            : "Governance"}
-                        </p>
-                        <p className="text-xl font-semibold text-white mt-1">{p.val}</p>
-                        <div className="mt-2 h-1.5 rounded-full bg-white/5 overflow-hidden">
-                          <div className={`${p.color} h-full`} style={{ width: `${p.val}%` }} />
+                        <p className="text-[10px] uppercase tracking-widest text-slate-400">{p.name}</p>
+                        <div className="mt-3 flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${p.color}`} />
+                          <span className="text-xs text-slate-300">Pillar</span>
                         </div>
                       </div>
                     ))}
                   </div>
 
-                  <div className="space-y-2">
-                    {[
-                      { label: "Scope 1 + 2 emissions", val: "162 tCO₂e", trend: "▼ -8.4%" },
-                      { label: "Avg. shipping miles", val: "1,824", trend: "▼ -3.1%" },
-                      { label: "Suppliers audited", val: "37 / 48", trend: "▲ +12" },
-                    ].map((r, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center justify-between py-2 text-sm border-b border-white/5 last:border-b-0"
-                      >
-                        <span className="text-slate-300">{r.label}</span>
-                        <span className="flex items-center gap-3">
-                          <span className="text-white font-medium">{r.val}</span>
-                          <span className="text-xs text-emerald-300">{r.trend}</span>
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                  <Link href="/demo" className="mt-7 block">
+                    <Button className="w-full h-11 bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-semibold">
+                      Launch demo →
+                    </Button>
+                  </Link>
+
+                  <p className="mt-3 text-[11px] text-slate-500 text-center">
+                    Sample data only · nothing written to your account or our database
+                  </p>
                 </div>
 
-                {/* floating badges */}
                 <div className="absolute -top-3 -right-3 glass rounded-xl px-3 py-2 text-xs text-cyan-200 flex items-center gap-2 float-slow">
-                  <span className="w-2 h-2 rounded-full bg-cyan-400" /> Synced 2 min ago
+                  <span className="w-2 h-2 rounded-full bg-cyan-400" /> Live in-browser
                 </div>
                 <div className="absolute -bottom-3 -left-3 glass rounded-xl px-3 py-2 text-xs text-emerald-200 flex items-center gap-2 float-slow" style={{ animationDelay: "1.5s" }}>
-                  Audit-ready PDF available
+                  Exit anytime — no traces left
                 </div>
               </div>
             </div>
@@ -460,12 +442,12 @@ export default function Main() {
                     Start your free trial
                   </Button>
                 </Link>
-                <Link href="/login">
+                <Link href="/demo">
                   <Button
                     variant="outline"
                     className="h-12 px-7 text-base bg-transparent border-white/10 text-white hover:bg-white/5"
                   >
-                    Sign in to your account
+                    See a live demo
                   </Button>
                 </Link>
               </div>
