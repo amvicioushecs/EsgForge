@@ -61,10 +61,21 @@ export async function POST(req: Request) {
     );
   }
 
+  // Pin to Climatiq factor data version 34 by default. Caret form lets Climatiq
+  // pick the latest minor release within major 34, so audits stay reproducible
+  // while we still benefit from non-breaking factor updates.
+  const selector: EmissionFactorInput = {
+    activity_id: emission_factor.activity_id,
+    data_version: emission_factor.data_version || "^34",
+  };
+  if (emission_factor.region) selector.region = emission_factor.region;
+  if (emission_factor.source) selector.source = emission_factor.source;
+
   console.log("[api/emissions/estimate] calling climatiq", {
     userId: session.user.id,
-    activity_id: emission_factor.activity_id,
-    region: emission_factor.region || null,
+    activity_id: selector.activity_id,
+    data_version: selector.data_version,
+    region: selector.region || null,
   });
 
   let upstream: Response;
@@ -77,7 +88,7 @@ export async function POST(req: Request) {
         Accept: "application/json",
         "Accept-Encoding": "gzip",
       },
-      body: JSON.stringify({ emission_factor, parameters }),
+      body: JSON.stringify({ emission_factor: selector, parameters }),
     });
   } catch (err) {
     console.error("[api/emissions/estimate] network error contacting Climatiq", err);
@@ -93,7 +104,8 @@ export async function POST(req: Request) {
     const co2e_unit = typeof data.co2e_unit === "string" ? data.co2e_unit : "kg";
 
     const ef = (data.emission_factor || {}) as Record<string, unknown>;
-    const efName = typeof ef.name === "string" ? ef.name : (emission_factor.activity_id ?? "Estimate");
+    const efName = typeof ef.name === "string" ? ef.name : (selector.activity_id ?? "Estimate");
+    const resolvedDataVersion = typeof ef.data_version === "string" ? ef.data_version : "";
 
     try {
       await totalumSdk.crud.createRecord("esg_metric", {
@@ -104,7 +116,8 @@ export async function POST(req: Request) {
         period: "",
         trend: "stable",
         recorded_at: new Date().toISOString(),
-        activity_id: emission_factor.activity_id,
+        activity_id: selector.activity_id,
+        data_version: resolvedDataVersion,
         input_parameters: JSON.stringify(parameters),
         user: session.user.id,
       });
