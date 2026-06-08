@@ -46,10 +46,11 @@ export function SiteHeader({ variant = "landing" }: { variant?: "landing" | "app
 
         {variant === "landing" && (
           <nav className="hidden md:flex items-center gap-7 text-sm text-slate-300">
-            <a href="#features" className="hover:text-cyan-300 transition">Features</a>
-            <a href="#how" className="hover:text-cyan-300 transition">How it works</a>
-            <a href="#pricing" className="hover:text-cyan-300 transition">Pricing</a>
-            <a href="#faq" className="hover:text-cyan-300 transition">FAQ</a>
+            <a href="/#features" className="hover:text-cyan-300 transition">Features</a>
+            <a href="/#how" className="hover:text-cyan-300 transition">How it works</a>
+            <a href="/#pricing" className="hover:text-cyan-300 transition">Pricing</a>
+            <a href="/#faq" className="hover:text-cyan-300 transition">FAQ</a>
+            <Link href="/blog" className="hover:text-cyan-300 transition">Blog</Link>
           </nav>
         )}
 
