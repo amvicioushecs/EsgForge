@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { totalumSdk } from "@/lib/totalum";
 
 interface WaitlistRow {
@@ -8,9 +9,16 @@ interface WaitlistRow {
   shopify_revenue_band?: string | null;
   referral_code: string;
   referred_by?: string | null;
+  referred_by_partner?: string | null;
   position: number;
   referral_count: number;
   createdAt?: string;
+}
+
+interface PartnerLookup {
+  _id: string;
+  partner_code?: string;
+  status?: string;
 }
 
 interface SignupRequest {
@@ -58,6 +66,9 @@ function publicRow(row: WaitlistRow) {
 export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => ({}))) as SignupRequest;
+    const cookieStore = await cookies();
+    const partnerCookie = (cookieStore.get("ef_partner")?.value || "").trim().toUpperCase();
+    const visitorCookie = (cookieStore.get("ef_visitor")?.value || "").trim();
     const rawEmail = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const company_name = typeof body.company_name === "string" ? body.company_name.trim() : "";
     const revenueBand = typeof body.shopify_revenue_band === "string"
@@ -85,6 +96,25 @@ export async function POST(req: Request) {
     if (existingRow) {
       console.log("[api/waitlist] returning existing", { email: rawEmail, position: existingRow.position });
       return NextResponse.json({ ok: true, data: { ...publicRow(existingRow), already_signed_up: true } });
+    }
+
+    // Resolve partner attribution (only if cookie maps to an active partner).
+    let partnerRow: PartnerLookup | null = null;
+    let partnerCodeStamp: string | null = null;
+    if (partnerCookie) {
+      try {
+        const pRes = await totalumSdk.crud.query("partner", {
+          _filter: { partner_code: partnerCookie },
+          _limit: 1,
+        } as Parameters<typeof totalumSdk.crud.query>[1]);
+        const candidate = (pRes?.data as unknown as PartnerLookup[] | undefined)?.[0];
+        if (candidate?._id && (!candidate.status || candidate.status === "active")) {
+          partnerRow = candidate;
+          partnerCodeStamp = (candidate.partner_code || partnerCookie).toUpperCase();
+        }
+      } catch (err) {
+        console.error("[api/waitlist] partner lookup failed", err);
+      }
     }
 
     // Resolve referrer (only if the code actually maps to someone).
@@ -125,6 +155,7 @@ export async function POST(req: Request) {
       shopify_revenue_band,
       referral_code,
       referred_by: referredByCode,
+      referred_by_partner: partnerCodeStamp,
       position: newPosition,
       referral_count: 0,
     });
@@ -163,7 +194,51 @@ export async function POST(req: Request) {
       }
     }
 
-    console.log("[api/waitlist] signup ok", { email: rawEmail, position: newPosition, referral_code });
+    // Convert the partner_referral row for this visitor (if any) — reuse the existing
+    // row instead of creating a second tracking record. Falls back to creating a row
+    // if the visitor came in before the tracker fired (edge case).
+    if (partnerRow?._id) {
+      try {
+        let referralRowId: string | null = null;
+        if (visitorCookie) {
+          const refRowRes = await totalumSdk.crud.query("partner_referral", {
+            _filter: { visitor_id: visitorCookie, partner: partnerRow._id },
+            _sort: { createdAt: "desc" },
+            _limit: 1,
+          } as Parameters<typeof totalumSdk.crud.query>[1]);
+          const refRow = (refRowRes?.data as unknown as Array<{ _id: string }> | undefined)?.[0];
+          referralRowId = refRow?._id ?? null;
+        }
+
+        if (referralRowId) {
+          await totalumSdk.crud.editRecordById("partner_referral", referralRowId, {
+            converted_to_waitlist: "yes",
+            waitlist: created._id,
+          });
+          console.log("[api/waitlist] partner_referral converted", { referralRowId, waitlistId: created._id });
+        } else {
+          await totalumSdk.crud.createRecord("partner_referral", {
+            partner: partnerRow._id,
+            landing_path: "/",
+            visitor_id: visitorCookie || `late_${created._id}`,
+            ip_hash: "",
+            user_agent: "",
+            converted_to_waitlist: "yes",
+            waitlist: created._id,
+          });
+          console.log("[api/waitlist] late-bind partner_referral created", { waitlistId: created._id });
+        }
+      } catch (err) {
+        console.error("[api/waitlist] failed to convert partner_referral", err);
+      }
+    }
+
+    console.log("[api/waitlist] signup ok", {
+      email: rawEmail,
+      position: newPosition,
+      referral_code,
+      partner: partnerCodeStamp,
+    });
 
     return NextResponse.json({
       ok: true,

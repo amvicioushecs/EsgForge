@@ -3,6 +3,7 @@ import { SiteHeader } from "@/components/common/SiteHeader";
 import { Button } from "@/components/ui/button";
 import { files } from "@/assets/files";
 import { WaitlistForm } from "@/components/landing/WaitlistForm";
+import { PartnerAttributionTracker } from "@/components/landing/PartnerAttributionTracker";
 
 const features = [
   {
@@ -137,6 +138,7 @@ const faqs = [
 export default function Main() {
   return (
     <div className="relative overflow-hidden grain">
+      <PartnerAttributionTracker />
       <SiteHeader variant="landing" />
 
       {/* HERO */}
