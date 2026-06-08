@@ -392,12 +392,13 @@ export default function Main() {
       <section id="pricing" className="relative py-24 border-t border-white/5">
         <div className="max-w-7xl mx-auto px-5 sm:px-8">
           <div className="text-center max-w-2xl mx-auto mb-14">
-            <p className="text-xs uppercase tracking-[0.25em] text-cyan-300 mb-4">Pricing</p>
+            <p className="text-xs uppercase tracking-[0.25em] text-cyan-300 mb-4">Founding cohort offer</p>
             <h2 className="text-4xl sm:text-5xl font-semibold text-white leading-tight">
-              Simple, transaction-volume pricing.
+              Founding Client Pricing.
             </h2>
             <p className="mt-5 text-slate-300/90 text-lg">
-              From $200/month. Implementation and bespoke services available for enterprise merchants.
+              Locked for life for the first 100 merchants. These rates are reserved for our
+              founding cohort — they&apos;re not the standard list price.
             </p>
           </div>
 
@@ -416,12 +417,21 @@ export default function Main() {
                     Most chosen
                   </div>
                 )}
-                <h3 className="text-2xl font-semibold text-white">{p.name}</h3>
-                <p className="text-sm text-slate-400 mt-1">{p.blurb}</p>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <h3 className="text-2xl font-semibold text-white">{p.name}</h3>
+                  <span className="px-2.5 py-1 text-[10px] uppercase tracking-widest rounded-full bg-cyan-400/10 text-cyan-300 border border-cyan-400/30 font-semibold">
+                    Founding Client
+                  </span>
+                </div>
+                <p className="text-sm text-slate-400 mt-2">{p.blurb}</p>
                 <div className="mt-6 flex items-baseline gap-1">
                   <span className="text-5xl font-semibold text-white">{p.price}</span>
                   <span className="text-slate-400 text-sm">{p.period}</span>
                 </div>
+                <p className="mt-3 text-xs text-cyan-200/90 leading-relaxed border-l-2 border-cyan-400/40 pl-3">
+                  Lock this founding rate for life — price never increases as long as you stay
+                  subscribed. Available only to the founding cohort (first 100 merchants).
+                </p>
                 <ul className="mt-6 space-y-3 text-sm text-slate-300">
                   {p.bullets.map((b) => (
                     <li key={b} className="flex items-start gap-2">
