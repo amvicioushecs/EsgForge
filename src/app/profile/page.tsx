@@ -37,7 +37,7 @@ export default function ProfilePage() {
       <div className="mb-8">
         <p className="text-xs uppercase tracking-[0.25em] text-cyan-300 mb-2">Account</p>
         <h1 className="text-3xl sm:text-4xl font-semibold text-white">Your profile</h1>
-        <p className="mt-2 text-slate-400 text-sm">Manage your Verdant account and preferences.</p>
+        <p className="mt-2 text-slate-400 text-sm">Manage your EsgForge account and preferences.</p>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -48,7 +48,7 @@ export default function ProfilePage() {
                 {initial}
               </div>
               <div className="min-w-0">
-                <h2 className="text-xl font-semibold text-white truncate">{user.name || "Verdant user"}</h2>
+                <h2 className="text-xl font-semibold text-white truncate">{user.name || "EsgForge user"}</h2>
                 <p className="text-sm text-slate-400 truncate">{user.email}</p>
                 <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-emerald-300 mt-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />

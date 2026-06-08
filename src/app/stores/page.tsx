@@ -78,7 +78,7 @@ export default function StoresPage() {
         <div>
           <p className="text-xs uppercase tracking-[0.25em] text-cyan-300 mb-2">Stores</p>
           <h1 className="text-3xl sm:text-4xl font-semibold text-white">Connected Shopify Plus stores</h1>
-          <p className="mt-2 text-slate-400 text-sm">Manage the stores Verdant pulls ESG data from.</p>
+          <p className="mt-2 text-slate-400 text-sm">Manage the stores EsgForge pulls ESG data from.</p>
         </div>
         <Button
           onClick={() => setShowForm((v) => !v)}

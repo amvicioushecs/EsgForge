@@ -67,9 +67,9 @@ export default function RegisterPage() {
 
       <div className="relative w-full max-w-md">
         <Link href="/" className="flex items-center justify-center gap-2.5 mb-8">
-          <img src={files.appIcon.url} alt="Verdant" className="w-10 h-10 rounded-lg ring-1 ring-cyan-400/30" />
+          <img src={files.appIcon.url} alt="EsgForge" className="w-10 h-10 rounded-lg ring-1 ring-cyan-400/30" />
           <div className="flex flex-col leading-none">
-            <span className="text-base font-semibold text-white tracking-tight">Verdant</span>
+            <span className="text-base font-semibold text-white tracking-tight">EsgForge</span>
             <span className="text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">ESG · Shopify Plus</span>
           </div>
         </Link>

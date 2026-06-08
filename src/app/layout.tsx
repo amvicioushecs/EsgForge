@@ -12,7 +12,7 @@ const manrope = Manrope({ variable: "--font-sans-brand", subsets: ["latin"], wei
 const fraunces = Fraunces({ variable: "--font-serif-brand", subsets: ["latin"], weight: ["300", "400", "500", "600", "700"] });
 
 export const metadata: Metadata = {
-  title: "Verdant — ESG Compliance Automation for Shopify Plus",
+  title: "EsgForge — ESG Compliance Automation for Shopify Plus",
   description: "Automate your sustainability compliance effortlessly. Audit-ready ESG reporting for Shopify Plus merchants.",
   icons: {
     icon: files.appIcon.url,

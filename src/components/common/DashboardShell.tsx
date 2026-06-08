@@ -62,9 +62,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       >
         <div className="h-full flex flex-col">
           <Link href="/" className="flex items-center gap-2.5 px-6 h-16 border-b border-white/5">
-            <img src={files.appIcon.url} alt="Verdant" className="w-9 h-9 rounded-lg ring-1 ring-cyan-400/30" />
+            <img src={files.appIcon.url} alt="EsgForge" className="w-9 h-9 rounded-lg ring-1 ring-cyan-400/30" />
             <div className="flex flex-col leading-none">
-              <span className="text-[15px] font-semibold tracking-tight text-white">Verdant</span>
+              <span className="text-[15px] font-semibold tracking-tight text-white">EsgForge</span>
               <span className="text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">ESG Console</span>
             </div>
           </Link>
@@ -133,8 +133,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             ☰
           </Button>
           <Link href="/" className="ml-3 flex items-center gap-2">
-            <img src={files.appIcon.url} alt="Verdant" className="w-7 h-7 rounded" />
-            <span className="font-semibold text-white">Verdant</span>
+            <img src={files.appIcon.url} alt="EsgForge" className="w-7 h-7 rounded" />
+            <span className="font-semibold text-white">EsgForge</span>
           </Link>
         </div>
 

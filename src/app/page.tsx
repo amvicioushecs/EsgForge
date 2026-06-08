@@ -117,15 +117,15 @@ const pricing = [
 const faqs = [
   {
     q: "Which frameworks do you support today?",
-    a: "Verdant ships with templates for CSRD (Europe), the SEC climate disclosure rule (US), GRI Standards, and TCFD. Custom frameworks are available on Enterprise.",
+    a: "EsgForge ships with templates for CSRD (Europe), the SEC climate disclosure rule (US), GRI Standards, and TCFD. Custom frameworks are available on Enterprise.",
   },
   {
-    q: "Is Verdant a replacement for my auditor?",
-    a: "No. Verdant prepares structured, traceable disclosures and supporting evidence so your auditor or sustainability consultant can sign off quickly.",
+    q: "Is EsgForge a replacement for my auditor?",
+    a: "No. EsgForge prepares structured, traceable disclosures and supporting evidence so your auditor or sustainability consultant can sign off quickly.",
   },
   {
     q: "How does the Shopify Plus integration work?",
-    a: "We use Shopify's official admin APIs with read-only scopes. You authorize Verdant from your Shopify admin, and we pull orders, shipping zones, and supplier data on a recurring schedule.",
+    a: "We use Shopify's official admin APIs with read-only scopes. You authorize EsgForge from your Shopify admin, and we pull orders, shipping zones, and supplier data on a recurring schedule.",
   },
   {
     q: "Where is my data stored?",
@@ -161,7 +161,7 @@ export default function Main() {
               </h1>
 
               <p className="mt-7 text-lg text-slate-300/90 max-w-2xl leading-relaxed">
-                Verdant pulls live data from your store, maps it to CSRD, SEC, GRI and TCFD
+                EsgForge pulls live data from your store, maps it to CSRD, SEC, GRI and TCFD
                 disclosures, and produces audit-ready reports — without spreadsheets, without a
                 sustainability team.
               </p>
@@ -478,8 +478,8 @@ export default function Main() {
       <footer className="border-t border-white/5 py-10">
         <div className="max-w-7xl mx-auto px-5 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-slate-400">
           <div className="flex items-center gap-2">
-            <img src={files.appIcon.url} alt="Verdant" className="w-6 h-6 rounded" />
-            <span>© {new Date().getFullYear()} Verdant. Built for Shopify Plus merchants.</span>
+            <img src={files.appIcon.url} alt="EsgForge" className="w-6 h-6 rounded" />
+            <span>© {new Date().getFullYear()} EsgForge. Built for Shopify Plus merchants.</span>
           </div>
           <div className="flex gap-6">
             <Link href="/privacy-policy" className="hover:text-cyan-300 transition">Privacy</Link>

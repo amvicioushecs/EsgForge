@@ -33,13 +33,13 @@ export function SiteHeader({ variant = "landing" }: { variant?: "landing" | "app
           <div className="relative">
             <img
               src={files.appIcon.url}
-              alt="Verdant"
+              alt="EsgForge"
               className="w-9 h-9 rounded-lg object-cover ring-1 ring-cyan-400/30 group-hover:ring-cyan-400/60 transition"
             />
             <div className="absolute inset-0 rounded-lg bg-cyan-400/0 group-hover:bg-cyan-400/10 transition pointer-events-none" />
           </div>
           <div className="flex flex-col leading-none">
-            <span className="text-[15px] font-semibold tracking-tight text-white">Verdant</span>
+            <span className="text-[15px] font-semibold tracking-tight text-white">EsgForge</span>
             <span className="text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">ESG · Shopify Plus</span>
           </div>
         </Link>
