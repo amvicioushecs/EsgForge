@@ -2,6 +2,7 @@ import Link from "next/link";
 import { SiteHeader } from "@/components/common/SiteHeader";
 import { Button } from "@/components/ui/button";
 import { files } from "@/assets/files";
+import { WaitlistForm } from "@/components/landing/WaitlistForm";
 
 const features = [
   {
@@ -166,12 +167,7 @@ export default function Main() {
                 sustainability team.
               </p>
 
-              <div className="mt-9 flex flex-col sm:flex-row gap-3">
-                <Link href="/register">
-                  <Button className="h-12 px-7 text-base bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-semibold glow-accent">
-                    Start your 14-day trial
-                  </Button>
-                </Link>
+              <div className="mt-9 flex flex-col sm:flex-row gap-3 flex-wrap">
                 <Link href="/demo">
                   <Button
                     variant="outline"
@@ -180,6 +176,11 @@ export default function Main() {
                     See a live demo
                   </Button>
                 </Link>
+                <a href="#waitlist">
+                  <Button className="h-12 px-7 text-base bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-semibold glow-accent">
+                    Join the Founding Merchants waitlist
+                  </Button>
+                </a>
               </div>
 
               <div className="mt-10 flex items-center gap-6 text-xs text-slate-400">
@@ -274,8 +275,55 @@ export default function Main() {
         </div>
       </section>
 
+      {/* WAITLIST */}
+      <section id="waitlist" className="relative py-20 border-t border-white/5 scroll-mt-20">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute top-10 right-1/4 w-[420px] h-[420px] rounded-full bg-cyan-500/10 blur-3xl" />
+        </div>
+        <div className="relative max-w-6xl mx-auto px-5 sm:px-8">
+          <div className="grid lg:grid-cols-12 gap-10 items-start">
+            <div className="lg:col-span-6">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-cyan-400/20 bg-cyan-400/5 text-xs tracking-wider uppercase text-cyan-300 mb-6">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 pulse-ring" />
+                Early access
+              </div>
+              <h2 className="text-4xl sm:text-5xl font-semibold text-white leading-tight">
+                Join the Founding Merchants waitlist
+              </h2>
+              <p className="mt-5 text-lg text-slate-300/90 leading-relaxed max-w-xl">
+                First 100 Shopify Plus merchants lock in founding launch pricing — for life.
+                Refer other merchants to jump the line.
+              </p>
+
+              <ul className="mt-8 space-y-3 text-sm text-slate-300/85">
+                <li className="flex items-start gap-3">
+                  <span className="mt-0.5 w-5 h-5 rounded-md bg-cyan-400/15 text-cyan-300 flex items-center justify-center text-xs">1</span>
+                  <span><span className="text-white font-medium">Reserve your spot</span> with just your work email — no card, no commitment.</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="mt-0.5 w-5 h-5 rounded-md bg-cyan-400/15 text-cyan-300 flex items-center justify-center text-xs">2</span>
+                  <span><span className="text-white font-medium">Share your referral link</span> — every Shopify Plus merchant who joins through it bumps you up the queue.</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="mt-0.5 w-5 h-5 rounded-md bg-cyan-400/15 text-cyan-300 flex items-center justify-center text-xs">3</span>
+                  <span><span className="text-white font-medium">Lock in founding pricing</span> if you land in the top 100. Forever.</span>
+                </li>
+              </ul>
+
+              <p className="mt-8 text-xs text-slate-500">
+                Prefer to look around first? <Link href="/demo" className="text-cyan-300 hover:text-cyan-200">See the live demo →</Link>
+              </p>
+            </div>
+
+            <div className="lg:col-span-6">
+              <WaitlistForm />
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* FEATURES */}
-      <section id="features" className="relative py-24">
+      <section id="features" className="relative py-24 border-t border-white/5">
         <div className="max-w-7xl mx-auto px-5 sm:px-8">
           <div className="max-w-2xl">
             <p className="text-xs uppercase tracking-[0.25em] text-cyan-300 mb-4">Built for merchants</p>
