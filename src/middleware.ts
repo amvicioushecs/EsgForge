@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { applySecurityHeaders } from "@/lib/security/headers";
+import { applySecurityHeaders, generateCspNonce } from "@/lib/security/headers";
 import {
   csrfCookieName,
   csrfShouldEnforce,
@@ -74,6 +74,13 @@ export async function middleware(request: NextRequest) {
   const startMs = Date.now();
   const { pathname } = request.nextUrl;
   const method = request.method;
+  const isHtmlNav =
+    !pathname.startsWith("/api/") &&
+    !pathname.startsWith("/_next/") &&
+    !pathname.includes(".");
+  // Per-request nonce for HTML responses so Next.js can stamp it on its own
+  // inline scripts. API/static responses don't need it.
+  const nonce = isHtmlNav ? generateCspNonce() : undefined;
 
   // CORS preflight — short-circuit but still apply security headers + CORS.
   if (method === "OPTIONS") {
@@ -104,9 +111,18 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  const response = NextResponse.next();
+  // Forward the nonce on the request headers so the Next.js runtime applies
+  // it to inline framework scripts (RSC streaming, hydration).
+  let response: NextResponse;
+  if (nonce) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-nonce", nonce);
+    response = NextResponse.next({ request: { headers: requestHeaders } });
+  } else {
+    response = NextResponse.next();
+  }
   addCorsHeaders(response, request);
-  applySecurityHeaders(response);
+  applySecurityHeaders(response, nonce);
   ensureCsrfCookie(request, response);
 
   // API + static — pass through (security headers already applied).
@@ -135,7 +151,7 @@ export async function middleware(request: NextRequest) {
     loginUrl.searchParams.set("redirect", pathname);
     const redirectResponse = NextResponse.redirect(loginUrl);
     addCorsHeaders(redirectResponse, request);
-    applySecurityHeaders(redirectResponse);
+    applySecurityHeaders(redirectResponse, nonce);
     ensureCsrfCookie(request, redirectResponse);
     logTiming(method, pathname, 302, startMs);
     return redirectResponse;
