@@ -1,24 +1,31 @@
 import { NextResponse } from "next/server";
+import { headers as nextHeaders } from "next/headers";
 import { totalumSdk } from "@/lib/totalum";
 import { requireSession } from "@/lib/session-helper";
+import { climatiqSemaphore } from "@/lib/security/semaphore";
+import { logAudit, hashIp, clientIpFromHeaders } from "@/lib/security/audit-log";
+import { apiError } from "@/lib/security/api-error";
+import {
+  assertObject,
+  assertAllowedKeys,
+  pickObject,
+  pickString,
+  ValidationError,
+} from "@/lib/security/validation";
+import { timedDbOp } from "@/lib/security/timing";
 
-interface EmissionFactorInput {
-  activity_id?: string;
-  data_version?: string;
+interface EmissionFactorSelector {
+  activity_id: string;
+  data_version: string;
   region?: string;
   source?: string;
-}
-
-interface EstimateRequest {
-  emission_factor?: EmissionFactorInput;
-  parameters?: Record<string, unknown>;
 }
 
 interface ClimatiqErrorBody {
   error?: string;
   error_code?: string;
   message?: string;
-  valid_values?: string[];
+  valid_values?: { unit_type?: string[] } | string[];
 }
 
 interface ClimatiqSuccess {
@@ -29,47 +36,95 @@ interface ClimatiqSuccess {
   constituent_gases?: Record<string, unknown>;
 }
 
+const MAX_RETRIES = 3;
+const BACKOFF_MS = [1000, 2000, 4000];
+
+function sleep(ms: number) {
+  return new Promise<void>((r) => setTimeout(r, ms));
+}
+
+async function callClimatiq(payload: object, apiKey: string): Promise<Response> {
+  return fetch("https://api.climatiq.io/data/v1/estimate", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "Accept-Encoding": "gzip",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function POST(req: Request) {
+  const reqHeaders = await nextHeaders();
+  const ipHash = await hashIp(clientIpFromHeaders(reqHeaders));
+  const userAgent = reqHeaders.get("user-agent") || "";
+
   const session = await requireSession();
   if (!session) {
-    return NextResponse.json({ ok: false, code: "unauthorized", message: "Sign in to run an estimate." }, { status: 401 });
+    return apiError(401, {
+      error: "unauthorized",
+      message: "Sign in to run an estimate.",
+      error_code: "unauthorized",
+    });
   }
 
   const apiKey = process.env.CLIMATIQ_API_KEY;
   if (!apiKey) {
     console.error("[api/emissions/estimate] CLIMATIQ_API_KEY is not set");
-    return NextResponse.json(
-      { ok: false, code: "not_configured", message: "Emissions service is not configured. Contact support." },
-      { status: 500 },
-    );
+    return apiError(500, {
+      error: "not_configured",
+      message: "Emissions service is not configured. Contact support.",
+      error_code: "not_configured",
+    });
   }
 
-  const body = (await req.json().catch(() => ({}))) as EstimateRequest;
-  const emission_factor = body.emission_factor;
-  const parameters = body.parameters;
+  // ── Input validation ────────────────────────────────────────────────────────
+  let selector: EmissionFactorSelector;
+  let parameters: Record<string, unknown>;
+  try {
+    const raw = await req.json().catch(() => ({}));
+    assertObject(raw);
+    assertAllowedKeys(raw, ["emission_factor", "parameters"]);
 
-  if (!emission_factor?.activity_id || typeof emission_factor.activity_id !== "string") {
-    return NextResponse.json(
-      { ok: false, code: "bad_request", message: "An activity_id is required." },
-      { status: 400 },
-    );
-  }
-  if (!parameters || typeof parameters !== "object" || Array.isArray(parameters) || Object.keys(parameters).length === 0) {
-    return NextResponse.json(
-      { ok: false, code: "bad_request", message: "Estimate parameters are required (e.g. energy + energy_unit)." },
-      { status: 400 },
-    );
-  }
+    const efObj = pickObject(raw, "emission_factor", {
+      required: true,
+      allowed: ["activity_id", "data_version", "region", "source"],
+    })!;
+    const activity_id = pickString(efObj, "activity_id", { required: true, maxLen: 200 })!;
+    const region = pickString(efObj, "region", { maxLen: 32 });
+    const source = pickString(efObj, "source", { maxLen: 200 });
 
-  // Pin to Climatiq factor data version 34 by default. Caret form lets Climatiq
-  // pick the latest minor release within major 34, so audits stay reproducible
-  // while we still benefit from non-breaking factor updates.
-  const selector: EmissionFactorInput = {
-    activity_id: emission_factor.activity_id,
-    data_version: emission_factor.data_version || "^34",
-  };
-  if (emission_factor.region) selector.region = emission_factor.region;
-  if (emission_factor.source) selector.source = emission_factor.source;
+    // PHASE 1: pin every selector to data_version "^34" — caret form lets Climatiq
+    // pick the latest minor release within major 34 so audits stay reproducible
+    // while we still benefit from non-breaking factor updates.
+    selector = {
+      activity_id,
+      data_version: "^34",
+      ...(region ? { region } : {}),
+      ...(source ? { source } : {}),
+    };
+
+    const paramsObj = pickObject(raw, "parameters", { required: true });
+    if (!paramsObj || Object.keys(paramsObj).length === 0) {
+      throw new ValidationError("Estimate parameters are required (e.g. energy + energy_unit).");
+    }
+    parameters = paramsObj;
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return apiError(400, {
+        error: "bad_request",
+        message: err.message,
+        error_code: "validation_failed",
+      });
+    }
+    return apiError(400, {
+      error: "bad_request",
+      message: "Invalid request body.",
+      error_code: "bad_request",
+    });
+  }
 
   console.log("[api/emissions/estimate] calling climatiq", {
     userId: session.user.id,
@@ -78,52 +133,130 @@ export async function POST(req: Request) {
     region: selector.region || null,
   });
 
-  let upstream: Response;
+  // ── Outbound call with concurrency cap + retry policy ──────────────────────
+  const release = await climatiqSemaphore.acquire();
+  let upstream: Response | null = null;
   try {
-    upstream = await fetch("https://api.climatiq.io/data/v1/estimate", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "Accept-Encoding": "gzip",
-      },
-      body: JSON.stringify({ emission_factor: selector, parameters }),
-    });
-  } catch (err) {
-    console.error("[api/emissions/estimate] network error contacting Climatiq", err);
-    return NextResponse.json(
-      { ok: false, code: "upstream_error", message: "Emissions service error, please retry shortly." },
-      { status: 502 },
-    );
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        upstream = await callClimatiq({ emission_factor: selector, parameters }, apiKey);
+      } catch (err) {
+        console.error("[api/emissions/estimate] network error", { attempt, err });
+        if (attempt === MAX_RETRIES) {
+          await logAudit({
+            action: "emissions_estimate_failed",
+            user_email: session.user.email,
+            user_id: session.user.id,
+            ip_hash: ipHash,
+            user_agent: userAgent,
+            metadata: { activity_id: selector.activity_id, reason: "network_error" },
+          });
+          return apiError(502, {
+            error: "upstream_error",
+            message: "Emissions service error, please retry shortly.",
+            error_code: "upstream_unreachable",
+          });
+        }
+        await sleep(BACKOFF_MS[attempt] ?? 4000);
+        continue;
+      }
+
+      // 200 → done
+      if (upstream.status === 200) break;
+
+      // 429 — distinguish quota_exceeded (terminal) from temporary rate limit (retry)
+      if (upstream.status === 429) {
+        const cloned = upstream.clone();
+        const body = (await cloned.json().catch(() => ({}))) as ClimatiqErrorBody;
+        const code = body.error_code || body.error || "";
+        if (code === "quota_exceeded") {
+          // Don't retry — surface immediately.
+          break;
+        }
+        // temporarily_rate_limited → exponential backoff retry
+        if (attempt < MAX_RETRIES) {
+          console.warn("[api/emissions/estimate] 429 rate-limited, retrying", {
+            attempt,
+            backoffMs: BACKOFF_MS[attempt],
+          });
+          await sleep(BACKOFF_MS[attempt] ?? 4000);
+          continue;
+        }
+        break;
+      }
+
+      // 503 — respect Retry-After then retry within budget
+      if (upstream.status === 503 && attempt < MAX_RETRIES) {
+        const retryAfter = upstream.headers.get("Retry-After");
+        const waitMs = retryAfter ? Math.min(Number(retryAfter) * 1000, 10_000) : BACKOFF_MS[attempt];
+        console.warn("[api/emissions/estimate] 503, honoring Retry-After", { attempt, waitMs });
+        await sleep(Number.isFinite(waitMs) && waitMs > 0 ? waitMs : (BACKOFF_MS[attempt] ?? 4000));
+        continue;
+      }
+
+      // Any other non-200 → stop, hand to error mapper
+      break;
+    }
+  } finally {
+    release();
   }
 
+  if (!upstream) {
+    return apiError(502, {
+      error: "upstream_error",
+      message: "Emissions service error, please retry shortly.",
+      error_code: "upstream_unreachable",
+    });
+  }
+
+  // ── Success path ────────────────────────────────────────────────────────────
   if (upstream.status === 200) {
     const data = (await upstream.json().catch(() => ({}))) as ClimatiqSuccess;
     const co2e = typeof data.co2e === "number" ? data.co2e : 0;
     const co2e_unit = typeof data.co2e_unit === "string" ? data.co2e_unit : "kg";
 
     const ef = (data.emission_factor || {}) as Record<string, unknown>;
-    const efName = typeof ef.name === "string" ? ef.name : (selector.activity_id ?? "Estimate");
+    const efName = typeof ef.name === "string" ? ef.name : selector.activity_id;
     const resolvedDataVersion = typeof ef.data_version === "string" ? ef.data_version : "";
 
+    let metricId: string | null = null;
     try {
-      await totalumSdk.crud.createRecord("esg_metric", {
-        metric_name: efName,
-        category: "environmental",
-        value: co2e,
-        unit: co2e_unit,
-        period: "",
-        trend: "stable",
-        recorded_at: new Date().toISOString(),
-        activity_id: selector.activity_id,
-        data_version: resolvedDataVersion,
-        input_parameters: JSON.stringify(parameters),
-        user: session.user.id,
-      });
+      const createRes = await timedDbOp("esg_metric.create", () =>
+        totalumSdk.crud.createRecord("esg_metric", {
+          metric_name: efName,
+          category: "environmental",
+          value: co2e,
+          unit: co2e_unit,
+          period: "",
+          trend: "stable",
+          recorded_at: new Date().toISOString(),
+          activity_id: selector.activity_id,
+          data_version: resolvedDataVersion,
+          climatiq_data_version: resolvedDataVersion,
+          input_parameters: JSON.stringify(parameters),
+          user: session.user.id,
+        }),
+      );
+      const created = createRes?.data as { _id?: string } | undefined;
+      metricId = created?._id ?? null;
     } catch (err) {
       console.error("[api/emissions/estimate] failed to persist esg_metric", err);
     }
+
+    await logAudit({
+      action: "emissions_estimate",
+      user_email: session.user.email,
+      user_id: session.user.id,
+      record_id: metricId,
+      ip_hash: ipHash,
+      user_agent: userAgent,
+      metadata: {
+        activity_id: selector.activity_id,
+        co2e,
+        co2e_unit,
+        data_version: resolvedDataVersion,
+      },
+    });
 
     return NextResponse.json({
       ok: true,
@@ -135,10 +268,10 @@ export async function POST(req: Request) {
     });
   }
 
+  // ── Error mapping (clean, user-facing messages) ────────────────────────────
   const status = upstream.status;
   const errBody = (await upstream.json().catch(() => ({}))) as ClimatiqErrorBody;
   const code = errBody.error_code || errBody.error || "";
-  const upstreamMessage = errBody.message || "";
 
   console.warn("[api/emissions/estimate] climatiq non-200", {
     userId: session.user.id,
@@ -146,78 +279,82 @@ export async function POST(req: Request) {
     code,
   });
 
+  await logAudit({
+    action: "emissions_estimate_failed",
+    user_email: session.user.email,
+    user_id: session.user.id,
+    ip_hash: ipHash,
+    user_agent: userAgent,
+    metadata: { activity_id: selector.activity_id, climatiq_status: status, climatiq_code: code },
+  });
+
   if (status === 400) {
     if (code === "no_emission_factors_found") {
-      return NextResponse.json(
-        {
-          ok: false,
-          code: "no_match",
-          message: "We couldn't match this activity to an emission factor. Try a different activity or unit.",
-        },
-        { status: 400 },
-      );
+      return apiError(400, {
+        error: "no_match",
+        message: "We couldn't match this activity to an emissions factor — try adjusting your inputs.",
+        error_code: "no_emission_factors_found",
+      });
     }
     if (code === "invalid_unit_type_supplied") {
-      return NextResponse.json(
-        {
-          ok: false,
-          code: "invalid_unit",
-          message: "Wrong unit type.",
-          valid_values: Array.isArray(errBody.valid_values) ? errBody.valid_values : [],
-        },
-        { status: 400 },
-      );
+      // Surface valid_values.unit_type so the UI can prompt the user with the right options.
+      const vv = errBody.valid_values;
+      const valid_unit_types = Array.isArray(vv)
+        ? vv
+        : Array.isArray((vv as { unit_type?: string[] } | undefined)?.unit_type)
+          ? (vv as { unit_type: string[] }).unit_type
+          : [];
+      return apiError(400, {
+        error: "invalid_unit",
+        message: "The unit type isn't supported for this activity. Pick one of the valid units.",
+        error_code: "invalid_unit_type_supplied",
+        extras: { valid_unit_types },
+      });
     }
-    return NextResponse.json(
-      { ok: false, code: "bad_request", message: upstreamMessage || "The estimate request was rejected." },
-      { status: 400 },
-    );
+    return apiError(400, {
+      error: "bad_request",
+      message: "The estimate request was rejected.",
+      error_code: code || "bad_request",
+    });
   }
 
   if (status === 401 || status === 403) {
-    return NextResponse.json(
-      { ok: false, code: "auth_error", message: "Emissions service auth failed." },
-      { status: 502 },
-    );
+    return apiError(502, {
+      error: "auth_error",
+      message: "Emissions service auth failed.",
+      error_code: "upstream_auth_error",
+    });
   }
 
   if (status === 429) {
     if (code === "quota_exceeded") {
-      return NextResponse.json(
-        {
-          ok: false,
-          code: "quota_exceeded",
-          message: "Monthly emissions quota reached. Try again next month or upgrade.",
-        },
-        { status: 429 },
-      );
+      return apiError(429, {
+        error: "quota_exceeded",
+        message: "Monthly emissions quota reached — contact support.",
+        error_code: "quota_exceeded",
+      });
     }
-    return NextResponse.json(
-      {
-        ok: false,
-        code: "rate_limited",
-        message: "Too many requests right now, please retry in a few minutes.",
-      },
-      { status: 429 },
-    );
+    return apiError(429, {
+      error: "rate_limited",
+      message: "Too many requests right now, please retry in a few minutes.",
+      error_code: "rate_limited",
+    });
   }
 
   if (status === 503) {
     const retryHeader = upstream.headers.get("Retry-After");
     const retry_after = retryHeader ? Number(retryHeader) : null;
-    return NextResponse.json(
-      {
-        ok: false,
-        code: "service_unavailable",
-        retry_after: Number.isFinite(retry_after) ? retry_after : null,
-        message: "Emissions service is temporarily unavailable.",
-      },
-      { status: 503 },
-    );
+    return apiError(503, {
+      error: "service_unavailable",
+      message: "Emissions service is temporarily unavailable.",
+      error_code: "service_unavailable",
+      extras: { retry_after: Number.isFinite(retry_after) ? retry_after : null },
+    });
   }
 
-  return NextResponse.json(
-    { ok: false, code: "upstream_error", message: "Emissions service error, please retry shortly." },
-    { status: 502 },
-  );
+  return apiError(502, {
+    error: "upstream_error",
+    message: "Emissions service error, please retry shortly.",
+    error_code: "upstream_error",
+  });
 }

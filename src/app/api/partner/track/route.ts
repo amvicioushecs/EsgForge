@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { totalumSdk } from "@/lib/totalum";
+import { logAudit } from "@/lib/security/audit-log";
 
 interface PartnerRow {
   _id: string;
@@ -90,6 +91,13 @@ export async function POST(req: NextRequest) {
         converted_to_waitlist: "no",
       });
       console.log("[api/partner/track] referral row created", { partner_code: rawCode, visitorId });
+      void logAudit({
+        action: "partner_referral_click",
+        ip_hash: ipHash,
+        user_agent: userAgent,
+        record_id: partner._id,
+        metadata: { partner_code: rawCode, landing_path: landingPath },
+      });
     } else {
       console.log("[api/partner/track] existing referral row reused", { id: existing._id });
     }

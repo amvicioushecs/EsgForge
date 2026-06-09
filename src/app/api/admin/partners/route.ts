@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server";
+import { headers as nextHeaders } from "next/headers";
 import { totalumSdk } from "@/lib/totalum";
 import { getAdminSession } from "@/lib/admin-auth";
+import { logAudit, hashIp, clientIpFromHeaders } from "@/lib/security/audit-log";
+import {
+  assertObject,
+  assertAllowedKeys,
+  pickString,
+  pickNumber,
+  ValidationError,
+} from "@/lib/security/validation";
+import { apiError } from "@/lib/security/api-error";
 
 interface PartnerRow {
   _id: string;
@@ -17,14 +27,6 @@ interface PartnerReferralLite {
   _id: string;
   partner?: string | { _id?: string };
   converted_to_waitlist?: string;
-}
-
-interface CreatePartnerRequest {
-  name?: string;
-  email?: string;
-  partner_code?: string;
-  commission_pct?: number;
-  tier?: string;
 }
 
 const CODE_RE = /^[A-Z0-9_-]{3,32}$/;
@@ -111,24 +113,55 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
   }
 
+  let name: string;
+  let email: string;
+  let codeIn: string;
+  let commission: number;
+  let tier: string;
+
   try {
-    const body = (await req.json().catch(() => ({}))) as CreatePartnerRequest;
-    const name = (body.name ?? "").trim();
-    const email = (body.email ?? "").trim().toLowerCase();
-    const codeIn = (body.partner_code ?? "").trim().toUpperCase();
-    const commission = Number.isFinite(Number(body.commission_pct))
-      ? Math.max(0, Math.min(100, Number(body.commission_pct)))
-      : 30;
-    const tier = VALID_TIERS.has((body.tier ?? "").trim().toLowerCase())
-      ? (body.tier as string).trim().toLowerCase()
-      : "referral";
+    const raw = await req.json().catch(() => ({}));
+    assertObject(raw);
+    assertAllowedKeys(raw, ["name", "email", "partner_code", "commission_pct", "tier"]);
+
+    name = (pickString(raw, "name", { required: true, maxLen: 200 }) || "").trim();
+    email = (pickString(raw, "email", { required: true, maxLen: 320 }) || "").trim().toLowerCase();
+    codeIn = (pickString(raw, "partner_code", { maxLen: 32 }) || "").trim().toUpperCase();
+    const commissionRaw = pickNumber(raw, "commission_pct", { min: 0, max: 100 });
+    commission = typeof commissionRaw === "number" ? commissionRaw : 30;
+    const tierIn = (pickString(raw, "tier", { maxLen: 32 }) || "").trim().toLowerCase();
+    tier = VALID_TIERS.has(tierIn) ? tierIn : "referral";
 
     if (!name) {
-      return NextResponse.json({ ok: false, error: "name_required" }, { status: 400 });
+      return apiError(400, {
+        error: "name_required",
+        message: "Partner name is required.",
+        error_code: "name_required",
+      });
     }
     if (!email || !EMAIL_RE.test(email)) {
-      return NextResponse.json({ ok: false, error: "invalid_email" }, { status: 400 });
+      return apiError(400, {
+        error: "invalid_email",
+        message: "Please enter a valid email address.",
+        error_code: "invalid_email",
+      });
     }
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return apiError(400, {
+        error: "bad_request",
+        message: err.message,
+        error_code: "validation_failed",
+      });
+    }
+    return apiError(400, {
+      error: "bad_request",
+      message: "Invalid request body.",
+      error_code: "bad_request",
+    });
+  }
+
+  try {
 
     const finalCode = codeIn || deriveCodeFromName(name);
     if (!CODE_RE.test(finalCode)) {
@@ -166,6 +199,18 @@ export async function POST(req: Request) {
     }
 
     console.log("[api/admin/partners POST] created", { code: finalCode, by: session.user.email });
+
+    const reqHeaders = await nextHeaders();
+    const ipHash = await hashIp(clientIpFromHeaders(reqHeaders));
+    void logAudit({
+      action: "partner_created",
+      user_email: session.user.email,
+      user_id: session.user.id,
+      record_id: created._id,
+      ip_hash: ipHash,
+      user_agent: reqHeaders.get("user-agent") || "",
+      metadata: { partner_code: finalCode, tier, commission_pct: commission },
+    });
 
     return NextResponse.json({
       ok: true,

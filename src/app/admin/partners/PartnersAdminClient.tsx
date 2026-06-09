@@ -61,6 +61,14 @@ export function PartnersAdminClient({
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [copiedFor, setCopiedFor] = useState<string | null>(null);
+  const [rotating, setRotating] = useState<string | null>(null);
+  const [rotateResult, setRotateResult] = useState<{
+    partnerId: string;
+    apiKey: string;
+    expiresAt: string;
+    graceHours: number;
+  } | null>(null);
+  const [rotateError, setRotateError] = useState("");
 
   const linkBase = useMemo(() => {
     // Prefer the configured brand URL (esgforge.xyz) so the link Hector hands to
@@ -123,6 +131,38 @@ export function PartnersAdminClient({
     }
     setForm(EMPTY_FORM);
     await load();
+  }
+
+  async function rotateKey(partnerId: string, partnerName: string) {
+    const confirmed = window.confirm(
+      `Rotate the API key for ${partnerName}?\n\nThe previous key will keep working for 24 hours so they can switch over without an outage.`,
+    );
+    if (!confirmed) return;
+    setRotateError("");
+    setRotateResult(null);
+    setRotating(partnerId);
+    const res = await api.post<{
+      partner_id: string;
+      api_key: string;
+      api_key_expires_at: string;
+      grace_period_hours: number;
+    }>(`/api/admin/partners/${partnerId}/rotate-key`, {});
+    setRotating(null);
+    if (!res.ok || !res.data?.api_key) {
+      const errPayload = res.error as { message?: string } | string | undefined;
+      const msg =
+        typeof errPayload === "object" && errPayload?.message
+          ? errPayload.message
+          : "Couldn't rotate the API key. Please try again.";
+      setRotateError(msg);
+      return;
+    }
+    setRotateResult({
+      partnerId: res.data.partner_id,
+      apiKey: res.data.api_key,
+      expiresAt: res.data.api_key_expires_at,
+      graceHours: res.data.grace_period_hours,
+    });
   }
 
   async function copyLink(code: string) {
@@ -330,10 +370,67 @@ export function PartnersAdminClient({
                     >
                       {copiedFor === p.partner_code ? "Copied!" : "Copy link"}
                     </Button>
+                    <Button
+                      type="button"
+                      onClick={() => rotateKey(p._id, p.name)}
+                      disabled={rotating === p._id}
+                      className="h-10 px-4 bg-transparent border border-amber-400/40 hover:bg-amber-400/10 text-amber-200 font-semibold text-xs disabled:opacity-50"
+                    >
+                      {rotating === p._id ? "Rotating…" : "Rotate API key"}
+                    </Button>
                   </div>
+
+                  {rotateResult?.partnerId === p._id && (
+                    <div className="mt-4 p-4 rounded-xl bg-amber-400/5 border border-amber-400/30">
+                      <div className="flex items-center gap-2">
+                        <span className="text-amber-300 text-xs font-semibold uppercase tracking-widest">
+                          New API key — copy now, shown once
+                        </span>
+                      </div>
+                      <div className="mt-3 flex items-stretch gap-2">
+                        <Input
+                          readOnly
+                          value={rotateResult.apiKey}
+                          onClick={(e) => e.currentTarget.select()}
+                          className="flex-1 h-10 bg-white/5 border-white/10 text-white text-xs font-mono"
+                        />
+                        <Button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(rotateResult.apiKey);
+                            } catch (err) {
+                              console.error("[admin/partners] copy api key failed", err);
+                            }
+                          }}
+                          className="h-10 px-4 bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold text-xs"
+                        >
+                          Copy key
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={() => setRotateResult(null)}
+                          className="h-10 px-3 bg-transparent border border-white/15 hover:bg-white/5 text-slate-300 text-xs"
+                        >
+                          Dismiss
+                        </Button>
+                      </div>
+                      <p className="mt-2 text-[11px] text-amber-200/80">
+                        {rotateResult.graceHours > 0
+                          ? `The previous key will keep working for ${rotateResult.graceHours} hours.`
+                          : "No previous key — this is the partner's first API key."}
+                      </p>
+                    </div>
+                  )}
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {rotateError && (
+          <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-200 text-xs">
+            {rotateError}
           </div>
         )}
       </section>

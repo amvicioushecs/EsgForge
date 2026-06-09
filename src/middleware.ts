@@ -1,29 +1,26 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { applySecurityHeaders } from "@/lib/security/headers";
+import {
+  csrfCookieName,
+  csrfShouldEnforce,
+  csrfVerify,
+  generateCsrfToken,
+} from "@/lib/security/csrf";
 
 const isProduction = process.env.NODE_ENV === "production";
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";
-// Extract origin from app URL (e.g. "https://my-app.com" from "https://my-app.com/")
 const appOrigin = appUrl ? new URL(appUrl).origin : "";
 
-/**
- * Check if an origin is allowed for CORS
- * - Development: any origin
- * - Production: NEXT_PUBLIC_APP_URL, *.totalum-project.com, or same-host (custom domains)
- */
 function isAllowedOrigin(origin: string, request: NextRequest): boolean {
   if (!isProduction) return true;
   if (appOrigin && origin === appOrigin) return true;
   if (/^https:\/\/[^/]+\.totalum-project\.com$/.test(origin)) return true;
-
-  // Trust same-host requests — custom domains served by this same worker
   const host = request.headers.get("host");
   if (host && origin === `https://${host}`) return true;
-
   return false;
 }
 
-// Public routes that don't require authentication
 const publicRoutes = [
   "/",
   "/login",
@@ -38,93 +35,118 @@ const publicRoutes = [
   "/stripe/success",
   "/stripe/cancel",
 ];
-// Protected app routes (require auth): /dashboard, /stores, /reports, /metrics, /notifications, /settings, /profile
 
-// Add CORS headers if the origin is allowed
 function addCorsHeaders(response: NextResponse, request: NextRequest) {
   const origin = request.headers.get("origin");
-
   if (origin && isAllowedOrigin(origin, request)) {
     response.headers.set("Access-Control-Allow-Origin", origin);
     response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
-    response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+    response.headers.set(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization, X-Requested-With, X-CSRF-Token",
+    );
     response.headers.set("Access-Control-Allow-Credentials", "true");
     response.headers.set("Access-Control-Max-Age", "86400");
     response.headers.set("Vary", "Origin");
   }
-
   return response;
 }
 
-// Set CSP to allow iframe embedding from any domain and remove X-Frame-Options
-function addCspHeaders(response: NextResponse) {
-  response.headers.set("Content-Security-Policy", "frame-ancestors *");
-  response.headers.delete("X-Frame-Options");
-  return response;
+function ensureCsrfCookie(request: NextRequest, response: NextResponse) {
+  if (!request.cookies.get(csrfCookieName())?.value) {
+    const token = generateCsrfToken();
+    response.cookies.set(csrfCookieName(), token, {
+      path: "/",
+      sameSite: "lax",
+      httpOnly: false, // intentionally readable so client JS can echo it in the X-CSRF-Token header
+      secure: isProduction,
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+    });
+  }
+}
+
+function logTiming(method: string, pathname: string, status: number, startMs: number) {
+  const elapsed = Date.now() - startMs;
+  console.log("[req]", { method, path: pathname, status, ms: elapsed });
 }
 
 export async function middleware(request: NextRequest) {
+  const startMs = Date.now();
   const { pathname } = request.nextUrl;
+  const method = request.method;
 
-  // Handle CORS preflight requests
-  if (request.method === "OPTIONS") {
+  // CORS preflight — short-circuit but still apply security headers + CORS.
+  if (method === "OPTIONS") {
     const response = new NextResponse(null, { status: 204 });
     addCorsHeaders(response, request);
-    addCspHeaders(response);
+    applySecurityHeaders(response);
+    logTiming(method, pathname, 204, startMs);
     return response;
   }
 
-  // Create response
+  // CSRF enforcement on state-mutating routes that aren't exempt.
+  if (csrfShouldEnforce(method, pathname)) {
+    if (!csrfVerify(request)) {
+      console.warn("[csrf] rejecting request", { method, pathname });
+      const denied = NextResponse.json(
+        {
+          ok: false,
+          error: "csrf_failed",
+          message: "CSRF token missing or invalid. Refresh the page and try again.",
+          error_code: "csrf_failed",
+        },
+        { status: 403 },
+      );
+      addCorsHeaders(denied, request);
+      applySecurityHeaders(denied);
+      logTiming(method, pathname, 403, startMs);
+      return denied;
+    }
+  }
+
   const response = NextResponse.next();
-
-  // Add CORS and CSP headers
   addCorsHeaders(response, request);
-  addCspHeaders(response);
+  applySecurityHeaders(response);
+  ensureCsrfCookie(request, response);
 
-  // Allow all API routes and static files
+  // API + static — pass through (security headers already applied).
   if (
     pathname.startsWith("/api/") ||
     pathname.startsWith("/_next/") ||
     pathname.includes(".")
   ) {
+    logTiming(method, pathname, 200, startMs);
     return response;
   }
 
-  // Allow public routes
+  // Public app routes.
   if (publicRoutes.some((route) => pathname === route || pathname.startsWith(route + "/"))) {
+    logTiming(method, pathname, 200, startMs);
     return response;
   }
 
-  // Check session cookie for protected routes (lightweight Edge-compatible check)
-  // Better Auth uses "better-auth.session_token" or "__Secure-better-auth.session_token" (when secure)
+  // Auth gate for protected routes.
   const sessionCookie =
     request.cookies.get("better-auth.session_token") ||
     request.cookies.get("__Secure-better-auth.session_token");
 
   if (!sessionCookie) {
-    // Redirect to login if no session cookie found
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", pathname);
     const redirectResponse = NextResponse.redirect(loginUrl);
     addCorsHeaders(redirectResponse, request);
-    addCspHeaders(redirectResponse);
+    applySecurityHeaders(redirectResponse);
+    ensureCsrfCookie(request, redirectResponse);
+    logTiming(method, pathname, 302, startMs);
     return redirectResponse;
   }
 
-  // Cookie exists - allow access
-  // Note: Full session validation happens in Server Components/API routes
+  logTiming(method, pathname, 200, startMs);
   return response;
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder
-     */
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

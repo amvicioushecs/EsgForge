@@ -14,12 +14,26 @@ export interface ApiResponse<T = unknown> {
   error?: any;
 }
 
+function readCsrfToken(): string {
+  if (typeof document === "undefined") return "";
+  const match = document.cookie.match(/(?:^|;\s*)ef_csrf=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
 async function request<T>(
   url: string,
   options?: RequestInit
 ): Promise<ApiResponse<T>> {
   try {
-    const res = await fetch(url, options);
+    const method = (options?.method || "GET").toUpperCase();
+    const headers: Record<string, string> = {
+      ...((options?.headers as Record<string, string>) || {}),
+    };
+    if (method !== "GET" && method !== "HEAD" && method !== "OPTIONS") {
+      const token = readCsrfToken();
+      if (token) headers["X-CSRF-Token"] = token;
+    }
+    const res = await fetch(url, { ...options, headers, credentials: "include" });
     const json = (await res.json()) as ApiResponse<T>;
     return json;
   } catch (err) {

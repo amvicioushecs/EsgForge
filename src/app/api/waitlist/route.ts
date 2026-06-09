@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { cookies, headers as nextHeaders } from "next/headers";
 import { totalumSdk } from "@/lib/totalum";
+import { logAudit, hashIp, clientIpFromHeaders } from "@/lib/security/audit-log";
 
 interface WaitlistRow {
   _id: string;
@@ -228,6 +229,19 @@ export async function POST(req: Request) {
           });
           console.log("[api/waitlist] late-bind partner_referral created", { waitlistId: created._id });
         }
+
+        const reqHeaders = await nextHeaders();
+        const ipHash = await hashIp(clientIpFromHeaders(reqHeaders));
+        void logAudit({
+          action: "partner_referral_conversion",
+          ip_hash: ipHash,
+          user_agent: reqHeaders.get("user-agent") || "",
+          record_id: created._id,
+          metadata: {
+            partner_code: partnerCodeStamp,
+            waitlist_position: newPosition,
+          },
+        });
       } catch (err) {
         console.error("[api/waitlist] failed to convert partner_referral", err);
       }
