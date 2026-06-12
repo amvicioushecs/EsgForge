@@ -43,6 +43,18 @@ function sleep(ms: number) {
   return new Promise<void>((r) => setTimeout(r, ms));
 }
 
+// Constant-time string comparison for API key check. Always walks the full
+// length of the expected key so the loop count doesn't reveal the prefix
+// match length to a timing attacker.
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 async function callClimatiq(payload: object, apiKey: string): Promise<Response> {
   return fetch("https://api.climatiq.io/data/v1/estimate", {
     method: "POST",
@@ -61,13 +73,30 @@ export async function POST(req: Request) {
   const ipHash = await hashIp(clientIpFromHeaders(reqHeaders));
   const userAgent = reqHeaders.get("user-agent") || "";
 
-  const session = await requireSession();
-  if (!session) {
-    return apiError(401, {
-      error: "unauthorized",
-      message: "Sign in to run an estimate.",
-      error_code: "unauthorized",
-    });
+  // Auth: Bearer service-key takes precedence (for the Shopify app's
+  // server-to-server calls). Falls back to Better Auth session otherwise.
+  const authHeader = reqHeaders.get("authorization") || "";
+  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+
+  let session: Awaited<ReturnType<typeof requireSession>> = null;
+  let isServiceCall = false;
+
+  if (bearerMatch) {
+    const token = bearerMatch[1].trim();
+    const expected = process.env.ESGFORGE_API_KEY || "";
+    if (!expected || !constantTimeEqual(token, expected)) {
+      return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
+    }
+    isServiceCall = true;
+  } else {
+    session = await requireSession();
+    if (!session) {
+      return apiError(401, {
+        error: "unauthorized",
+        message: "Sign in to run an estimate.",
+        error_code: "unauthorized",
+      });
+    }
   }
 
   const apiKey = process.env.CLIMATIQ_API_KEY;
@@ -127,7 +156,8 @@ export async function POST(req: Request) {
   }
 
   console.log("[api/emissions/estimate] calling climatiq", {
-    userId: session.user.id,
+    caller: isServiceCall ? "service" : "user",
+    userId: session?.user.id ?? null,
     activity_id: selector.activity_id,
     data_version: selector.data_version,
     region: selector.region || null,
@@ -145,11 +175,15 @@ export async function POST(req: Request) {
         if (attempt === MAX_RETRIES) {
           await logAudit({
             action: "emissions_estimate_failed",
-            user_email: session.user.email,
-            user_id: session.user.id,
+            user_email: session?.user.email ?? null,
+            user_id: session?.user.id ?? null,
             ip_hash: ipHash,
             user_agent: userAgent,
-            metadata: { activity_id: selector.activity_id, reason: "network_error" },
+            metadata: {
+              activity_id: selector.activity_id,
+              reason: "network_error",
+              caller: isServiceCall ? "service" : "user",
+            },
           });
           return apiError(502, {
             error: "upstream_error",
@@ -221,21 +255,24 @@ export async function POST(req: Request) {
 
     let metricId: string | null = null;
     try {
+      const metricRow: Record<string, unknown> = {
+        metric_name: efName,
+        category: "environmental",
+        value: co2e,
+        unit: co2e_unit,
+        period: "",
+        trend: "stable",
+        recorded_at: new Date().toISOString(),
+        activity_id: selector.activity_id,
+        data_version: resolvedDataVersion,
+        climatiq_data_version: resolvedDataVersion,
+        input_parameters: JSON.stringify(parameters),
+      };
+      // Only attach a user reference for session-authenticated calls. Service
+      // calls (Shopify app) don't carry a user identity at this layer.
+      if (session) metricRow.user = session.user.id;
       const createRes = await timedDbOp("esg_metric.create", () =>
-        totalumSdk.crud.createRecord("esg_metric", {
-          metric_name: efName,
-          category: "environmental",
-          value: co2e,
-          unit: co2e_unit,
-          period: "",
-          trend: "stable",
-          recorded_at: new Date().toISOString(),
-          activity_id: selector.activity_id,
-          data_version: resolvedDataVersion,
-          climatiq_data_version: resolvedDataVersion,
-          input_parameters: JSON.stringify(parameters),
-          user: session.user.id,
-        }),
+        totalumSdk.crud.createRecord("esg_metric", metricRow),
       );
       const created = createRes?.data as { _id?: string } | undefined;
       metricId = created?._id ?? null;
@@ -245,8 +282,8 @@ export async function POST(req: Request) {
 
     await logAudit({
       action: "emissions_estimate",
-      user_email: session.user.email,
-      user_id: session.user.id,
+      user_email: session?.user.email ?? null,
+      user_id: session?.user.id ?? null,
       record_id: metricId,
       ip_hash: ipHash,
       user_agent: userAgent,
@@ -255,6 +292,7 @@ export async function POST(req: Request) {
         co2e,
         co2e_unit,
         data_version: resolvedDataVersion,
+        caller: isServiceCall ? "service" : "user",
       },
     });
 
@@ -274,18 +312,24 @@ export async function POST(req: Request) {
   const code = errBody.error_code || errBody.error || "";
 
   console.warn("[api/emissions/estimate] climatiq non-200", {
-    userId: session.user.id,
+    caller: isServiceCall ? "service" : "user",
+    userId: session?.user.id ?? null,
     status,
     code,
   });
 
   await logAudit({
     action: "emissions_estimate_failed",
-    user_email: session.user.email,
-    user_id: session.user.id,
+    user_email: session?.user.email ?? null,
+    user_id: session?.user.id ?? null,
     ip_hash: ipHash,
     user_agent: userAgent,
-    metadata: { activity_id: selector.activity_id, climatiq_status: status, climatiq_code: code },
+    metadata: {
+      activity_id: selector.activity_id,
+      climatiq_status: status,
+      climatiq_code: code,
+      caller: isServiceCall ? "service" : "user",
+    },
   });
 
   if (status === 400) {

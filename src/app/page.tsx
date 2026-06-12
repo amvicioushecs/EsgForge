@@ -69,50 +69,38 @@ const steps = [
   },
 ];
 
+// Single founding tier billed monthly or annually. Same plan, same features —
+// annual just gets two months free vs. monthly.
+const foundingBullets = [
+  "Up to 5 Shopify Plus stores",
+  "All disclosure frameworks (CSRD, SEC, GRI, TCFD)",
+  "Quarterly audit-ready PDFs",
+  "Dedicated success manager",
+  "Priority support",
+];
+
 const pricing = [
   {
-    name: "Starter",
-    price: "$200",
+    name: "Founding Plan",
+    cadence: "Monthly billing",
+    price: "$699",
     period: "/ month",
-    blurb: "For Shopify Plus merchants under $5M ARR.",
-    bullets: [
-      "1 Shopify Plus store",
-      "Monthly compliance score",
-      "CSRD + GRI report templates",
-      "Email alerts",
-    ],
-    cta: "Start free trial",
+    blurb: "Pay month-to-month, cancel anytime.",
+    bullets: foundingBullets,
+    cta: "Start monthly",
     featured: false,
+    savingsLabel: null as string | null,
   },
   {
-    name: "Growth",
-    price: "$500",
-    period: "/ month",
-    blurb: "For merchants between $5M and $100M ARR.",
-    bullets: [
-      "Up to 5 stores",
-      "All disclosure frameworks",
-      "Quarterly audit-ready PDFs",
-      "Dedicated success manager",
-      "Priority support",
-    ],
-    cta: "Start free trial",
+    name: "Founding Plan",
+    cadence: "Annual billing",
+    price: "$6,990",
+    period: "/ year",
+    blurb: "Pay yearly and lock in the best founding rate.",
+    bullets: foundingBullets,
+    cta: "Start annual",
     featured: true,
-  },
-  {
-    name: "Enterprise",
-    price: "Custom",
-    period: "",
-    blurb: "For Shopify Plus brands above $100M ARR.",
-    bullets: [
-      "Unlimited stores",
-      "Custom data pipelines",
-      "Bespoke implementation",
-      "SLA and onboarding team",
-      "Legal and audit liaison",
-    ],
-    cta: "Talk to us",
-    featured: false,
+    savingsLabel: "2 months free vs. monthly",
   },
 ];
 
@@ -404,23 +392,28 @@ export default function Main() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
             {pricing.map((p) => (
               <div
-                key={p.name}
+                key={p.cadence}
                 className={`relative p-8 rounded-2xl flex flex-col ${
                   p.featured
                     ? "glass glow-accent ring-1 ring-cyan-400/40"
                     : "border border-white/5 bg-white/[0.02]"
                 }`}
               >
-                {p.featured && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 text-xs uppercase tracking-widest rounded-full bg-cyan-400 text-slate-950 font-semibold">
-                    Most chosen
+                {p.featured && p.savingsLabel && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 text-xs uppercase tracking-widest rounded-full bg-cyan-400 text-slate-950 font-semibold whitespace-nowrap">
+                    {p.savingsLabel}
                   </div>
                 )}
                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <h3 className="text-2xl font-semibold text-white">{p.name}</h3>
+                  <div>
+                    <h3 className="text-2xl font-semibold text-white">{p.name}</h3>
+                    <p className="text-xs uppercase tracking-[0.2em] text-cyan-300/90 mt-1">
+                      {p.cadence}
+                    </p>
+                  </div>
                   <span className="px-2.5 py-1 text-[10px] uppercase tracking-widest rounded-full bg-cyan-400/10 text-cyan-300 border border-cyan-400/30 font-semibold">
                     Founding Client
                   </span>
