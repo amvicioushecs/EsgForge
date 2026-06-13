@@ -73,31 +73,22 @@ export async function POST(req: Request) {
   const ipHash = await hashIp(clientIpFromHeaders(reqHeaders));
   const userAgent = reqHeaders.get("user-agent") || "";
 
-  // Auth: Bearer service-key takes precedence (for the Shopify app's
-  // server-to-server calls). Falls back to Better Auth session otherwise.
+  // Auth: this is now a service-to-service endpoint. Every inbound request
+  // MUST carry `Authorization: Bearer <ESGFORGE_API_KEY>`. The token is
+  // compared in constant time against the env-configured key. Missing
+  // header, missing env, or mismatched token → 401 {"error":"Unauthorized"}.
   const authHeader = reqHeaders.get("authorization") || "";
   const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  const expectedKey = process.env.ESGFORGE_API_KEY || "";
 
-  let session: Awaited<ReturnType<typeof requireSession>> = null;
-  let isServiceCall = false;
-
-  if (bearerMatch) {
-    const token = bearerMatch[1].trim();
-    const expected = process.env.ESGFORGE_API_KEY || "";
-    if (!expected || !constantTimeEqual(token, expected)) {
-      return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
-    }
-    isServiceCall = true;
-  } else {
-    session = await requireSession();
-    if (!session) {
-      return apiError(401, {
-        error: "unauthorized",
-        message: "Sign in to run an estimate.",
-        error_code: "unauthorized",
-      });
-    }
+  if (!bearerMatch || !expectedKey || !constantTimeEqual(bearerMatch[1].trim(), expectedKey)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  // No user session attached on service calls. Downstream code treats this
+  // route as caller="service" — same audit/log fields, no user reference.
+  const session: Awaited<ReturnType<typeof requireSession>> = null;
+  const isServiceCall = true;
 
   const apiKey = process.env.CLIMATIQ_API_KEY;
   if (!apiKey) {
