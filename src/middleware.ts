@@ -21,6 +21,22 @@ function isAllowedOrigin(origin: string, request: NextRequest): boolean {
   return false;
 }
 
+// Sensitive path probes — return 404 (not 403) so scanners can't fingerprint
+// the block. These are noise, not errors: do not log them as warnings.
+const BLOCKED_PATTERNS: RegExp[] = [
+  /^\/\.env/i,
+  /^\/\.git\//i,
+  /^\/terraform/i,
+  /^\/\.terraform/i,
+  /^\/wp-config/i,
+  /^\/config\/secrets/i,
+  /^\/config\/\.env/i,
+  /^\/backend\/\.env/i,
+  /^\/app\/\.env/i,
+  /^\/config\.inc\.php/i,
+  /^\/includes\/config/i,
+];
+
 const publicRoutes = [
   "/",
   "/login",
@@ -74,6 +90,15 @@ export async function middleware(request: NextRequest) {
   const startMs = Date.now();
   const { pathname } = request.nextUrl;
   const method = request.method;
+
+  // Sensitive-path probe shield: 404 silently before any other processing
+  // (auth, CSRF, CORS, headers). Scanners get a generic not-found and can't
+  // tell the path is special.
+  for (const pattern of BLOCKED_PATTERNS) {
+    if (pattern.test(pathname)) {
+      return new NextResponse(null, { status: 404 });
+    }
+  }
   const isHtmlNav =
     !pathname.startsWith("/api/") &&
     !pathname.startsWith("/_next/") &&
