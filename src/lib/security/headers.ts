@@ -35,7 +35,13 @@ function buildCsp(nonce?: string): string {
 
 export function applySecurityHeaders(response: NextResponse, nonce?: string) {
   response.headers.set("Content-Security-Policy", buildCsp(nonce));
-  response.headers.set("X-Frame-Options", "DENY");
+  // NOTE: do NOT set `X-Frame-Options: DENY` here. This app is rendered inside
+  // the Totalum editor/preview iframe (see ScriptExecutor's parent postMessage
+  // bridge), and the CSP above intentionally allows that via `frame-ancestors *`.
+  // `X-Frame-Options: DENY` is the stricter, legacy header and would win over the
+  // CSP — blocking the app in every iframe and breaking the preview with a
+  // "refused to connect" error. Framing policy is governed solely by the CSP
+  // `frame-ancestors` directive, which is the modern, more expressive mechanism.
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");

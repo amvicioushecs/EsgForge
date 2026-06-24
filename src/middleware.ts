@@ -23,18 +23,38 @@ function isAllowedOrigin(origin: string, request: NextRequest): boolean {
 
 // Sensitive path probes — return 404 (not 403) so scanners can't fingerprint
 // the block. These are noise, not errors: do not log them as warnings.
+//
+// Patterns are matched against the (decoded) pathname only — never the query
+// string — so they can't accidentally block a legitimate page that merely has
+// a suspicious-looking query param. Each pattern is anchored to a path segment
+// boundary ((^|/)) or the path end ($) so it can't fire mid-word.
 const BLOCKED_PATTERNS: RegExp[] = [
-  /^\/\.env/i,
-  /^\/\.git\//i,
-  /^\/terraform/i,
-  /^\/\.terraform/i,
-  /^\/wp-config/i,
-  /^\/config\/secrets/i,
-  /^\/config\/\.env/i,
-  /^\/backend\/\.env/i,
-  /^\/app\/\.env/i,
-  /^\/config\.inc\.php/i,
-  /^\/includes\/config/i,
+  // Dotenv files anywhere: /.env, /.env.local, /.env.production, /app/.env, /config/.env.backup
+  /(^|\/)\.env(\.[A-Za-z0-9_-]+)*\/?$/i,
+  // PHP scripts/probes anywhere: /wp-config.php, /phpinfo.php, /debug.php, /test.php.bak, /admin/info.php
+  /\.php(\.[A-Za-z0-9_-]+)*\/?$/i,
+  // Backup / saved / editor-swap copies: foo.bak, foo.old, page.save, .swp/.swo/.orig/.tmp
+  /\.(bak|old|save|swp|swo|orig|tmp)\/?$/i,
+  // Anything ending in a tilde (emacs/editor backup): /index.html~, /config~
+  /~\/?$/,
+  // VCS metadata: any path containing /.git/ (or ending in /.git), plus hg/svn/bzr
+  /(^|\/)\.git(\/|$)/i,
+  /(^|\/)\.(hg|svn|bzr)(\/|$)/i,
+  // Terraform state & config probes: /terraform.tfstate, /.terraform/, /terraform/anything
+  // (anchored so a slug like /terraforming-guide isn't caught)
+  /(^|\/)\.?terraform([./]|$)/i,
+  /\.tfstate(\.[A-Za-z0-9_-]+)*\/?$/i,
+  // WordPress config probes: /wp-config, /wp-config.php (php handled above too)
+  /(^|\/)wp-config/i,
+  // Common app/server config & secret-store probes
+  /(^|\/)(config\/secrets|includes\/config|config\.inc|config\/database)/i,
+  // .well-known probe variants aimed at secrets / VCS / config (legit .well-known
+  // files like security.txt or apple-app-site-association have no such extension)
+  /^\/\.well-known\/.*\.(env|git|php|sql|bak|old|save|ini|yml|yaml|key|pem)$/i,
+  // High-signal credential / secret files probed directly at a path root
+  /(^|\/)(\.htpasswd|\.htaccess|\.npmrc|\.netrc|\.aws|\.ssh|id_rsa|id_dsa|\.dockercfg|docker-compose\.ya?ml)(\/|$)/i,
+  // Dumped databases, private keys and key stores
+  /\.(sql|sql\.gz|dump|pem|key|p12|pfx|kdbx)\/?$/i,
 ];
 
 const publicRoutes = [
@@ -93,10 +113,19 @@ export async function middleware(request: NextRequest) {
 
   // Sensitive-path probe shield: 404 silently before any other processing
   // (auth, CSRF, CORS, headers). Scanners get a generic not-found and can't
-  // tell the path is special.
+  // tell the path is special. The body/headers mirror an ordinary 404 so the
+  // block is indistinguishable from a missing page, and we mark it no-store so
+  // no CDN/browser caches the probe response.
   for (const pattern of BLOCKED_PATTERNS) {
     if (pattern.test(pathname)) {
-      return new NextResponse(null, { status: 404 });
+      return new NextResponse("404: This page could not be found.", {
+        status: 404,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "X-Content-Type-Options": "nosniff",
+          "Cache-Control": "no-store",
+        },
+      });
     }
   }
   const isHtmlNav =
