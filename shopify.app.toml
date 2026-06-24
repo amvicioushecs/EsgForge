@@ -1,0 +1,39 @@
+# Shopify App Configuration
+# For more details, see: https://shopify.dev/docs/apps/tools/cli/configuration
+
+name = "EsgForge"
+client_id = "59d8ac9228191e3dfd4403879e8a328a" # Replace with your Shopify Client ID from Shopify Partner Dashboard
+application_url = "https://esgforge.xyz" # Replace with your public App URL (e.g. Next.js app URL)
+embedded = true
+
+[access_scopes]
+# Required scopes for ESG metric calculations on orders
+scopes = "read_orders"
+
+[auth]
+redirect_urls = [
+  "https://esgforge.xyz/api/auth/callback/shopify"
+]
+
+[webhooks]
+api_version = "2024-04"
+
+  # Standard webhook to process fulfilled orders and calculate emissions
+  [[webhooks.subscriptions]]
+  topics = [ "orders/fulfilled" ]
+  uri = "/api/shopify/webhook"
+
+  # GDPR Mandatory Webhooks: Customer data request
+  [[webhooks.subscriptions]]
+  topics = [ "customers/data_request" ]
+  uri = "/api/webhooks/customers/data_request"
+
+  # GDPR Mandatory Webhooks: Customer data deletion/redaction
+  [[webhooks.subscriptions]]
+  topics = [ "customers/redact" ]
+  uri = "/api/webhooks/customers/redact"
+
+  # GDPR Mandatory Webhooks: Shop data deletion/redaction
+  [[webhooks.subscriptions]]
+  topics = [ "shop/redact" ]
+  uri = "/api/webhooks/shop/redact"
