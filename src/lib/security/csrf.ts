@@ -33,6 +33,8 @@ const EXEMPT_PATH_PREFIXES = [
   "/api/auth/", // Better-Auth handles its own CSRF
   "/api/stripe/webhook", // Webhook signed by Stripe
   "/api/shopify/webhook", // Webhook signed by Shopify HMAC
+  "/api/webhooks/", // GDPR webhooks signed by Shopify HMAC
+  "/api/emissions/estimate", // Service-to-service API key protected
   "/api/waitlist", // Anonymous public form — protected by validation + rate limit
   "/api/partner/track", // Anonymous tracker — fired before any cookie exists
   "/api/health", // Read-only health probe
