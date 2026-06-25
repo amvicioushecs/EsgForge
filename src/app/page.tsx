@@ -141,20 +141,21 @@ export default function Main() {
             <div className="lg:col-span-7">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-cyan-400/20 bg-cyan-400/5 text-xs tracking-wider uppercase text-cyan-300 mb-7">
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 pulse-ring" />
-                Sustainability reporting on autopilot
+                Never write a compliance report again
               </div>
 
               <h1 className="text-5xl sm:text-6xl lg:text-7xl font-semibold text-white leading-[1.02]">
-                ESG compliance,
+                ESG compliance reports,
                 <br />
-                <span className="italic font-light text-cyan-300/95">automated end‑to‑end</span>
-                <span className="text-white"> for Shopify Plus.</span>
+                <span className="italic font-light text-cyan-300/95">made irrelevant</span>
+                <span className="text-white"> for the ecom owner.</span>
               </h1>
 
               <p className="mt-7 text-lg text-slate-300/90 max-w-2xl leading-relaxed">
-                EsgForge pulls live data from your store, maps it to CSRD, SEC, GRI and TCFD
-                disclosures, and produces audit-ready reports — without spreadsheets, without a
-                sustainability team.
+                EsgForge absorbs the entire ESG compliance burden — pulling live data from your
+                store, mapping it to CSRD, SEC, GRI and TCFD, and producing audit-ready, defensible
+                disclosures on its own. Finance and legal review and sign; no one on your team ever
+                touches a report again.
               </p>
 
               <div className="mt-9 flex flex-col sm:flex-row gap-3 flex-wrap">
